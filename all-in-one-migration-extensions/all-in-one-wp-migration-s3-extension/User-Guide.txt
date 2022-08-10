@@ -1,0 +1,3 @@
+Link to Amazon S3 Extension user guide:
+
+https://help.servmask.com/knowledgebase/amazon-s3-extension-user-guide/

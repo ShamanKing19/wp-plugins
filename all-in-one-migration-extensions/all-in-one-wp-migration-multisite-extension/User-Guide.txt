@@ -1,0 +1,3 @@
+Link to Multisite Extension user guide:
+
+https://help.servmask.com/knowledgebase/multisite-extension-user-guide/
