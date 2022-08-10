@@ -1,0 +1,1 @@
+<?php // Тут обычно пишут silence is golden

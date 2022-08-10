@@ -1,0 +1,16 @@
+{
+    "name": "user_lex1ru/podeli-payment-gateway",
+    "autoload": {
+        "psr-4": {
+            "UserLex1ru\\PodeliPaymentGateway\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "skillline"
+        }
+    ],
+    "require": {
+        "business-ru/open-api-sdk-php": "^1.0"
+    }
+}
