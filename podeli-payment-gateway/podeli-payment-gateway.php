@@ -33,40 +33,6 @@ function hide_refund_amount($class, $item, $order){
 }
 
 
-// Значение в <span class="wc-order-refund-amount"> или class = "woocommerce-Price-amount amount"
-add_filter( "woocommerce_review_order_before_payment", "add_payment_gateway_description" );
-function add_payment_gateway_description() {
-	$style = <<<EOF
-		<style>
-			#payment_method_podeli	{
-				position: relative;
-			    bottom: -7px;	
-			}
-			.woocommerce-checkout #payment ul.payment_methods li.payment_method_podeli {
-				flex-wrap: wrap;
-				padding-bottom: 0;
-				padding-top: 8px;
-			}
-			.woocommerce-checkout #payment ul.payment_methods li.payment_method_podeli::after {
-		        content: "Оплата частями";
-			    color: #4d4d4d;
-			    padding-left: 24px;
-			    display: block;
-			    width: 100%;
-		        padding-bottom: 12px;
-		        margin-top: -3px;
-			    font-size: 13px;
-			    font-weight: 500;
-			    font-family: "Montserrat", sans-serif;
-			    line-height: 1;
-				}
-		</style>
-	EOF;
-
-	echo $style;
-}
-
-
 add_action('plugins_loaded', 'WCPodeliPayment');
 function WCPodeliPayment()
 {
@@ -105,7 +71,7 @@ function WCPodeliPayment()
 	add_action( 'woocommerce_order_status_changed', 'cancel_podeli_order', 10, 4);
 	function cancel_podeli_order($id, $status_transition_from, $status_transition_to, $instance) {
 		if (strtoupper($status_transition_to) != "CANCELLED") {
-		    return;
+            return;
 		}
 
 		$gateway = new WCPodeliPayment();
@@ -116,9 +82,9 @@ function WCPodeliPayment()
 		$podeliOrderId = $order->get_meta("podeli_order_id");
 
 		$infoResponse = $client->orderInfo($podeliOrderId);
-		$podeliOrderStatus = $infoResponse["data"]["order"]["status"];
+        $podeliOrderStatus = $infoResponse["data"]["order"]["status"];
 
-		// REFUND if was paid and than cancelled
+		// REFUND if was paid and then cancelled
 		if (strtoupper($podeliOrderStatus) == "COMPLETED") {
 			$reason = "shop";
 			$orderItems = $order->get_items();
@@ -142,18 +108,19 @@ function WCPodeliPayment()
 			];
 
 			$refundResponse = $client->orderRefund($podeliOrderId, $refundData, $xCorrelationId);
-			$refundStatus = $refundResponse["data"]["order"]["status"];
+            $refundStatus = $refundResponse["data"]["order"]["status"];
 
 			if ($refundResponse && strtoupper($refundStatus) == "REFUNDED") {
 				$order->update_status( "cancelled" );
 			}
 		}
 
-		// CANCEL if wasn't paid and than cancelled
+		// CANCEL if wasn't paid and then cancelled
 		$cancelAllowedStatuses = ["CREATED", "SCORING", "APPROVED", "WAIT_FOR_COMMIT"];
 		if (in_array(strtoupper($podeliOrderStatus), $cancelAllowedStatuses)) {
 			$cancelResponse = $client->orderCancel($podeliOrderId, $xCorrelationId);
-			if ($cancelResponse["data"]["status"] == "CANCELLED") {
+
+            if ($cancelResponse["data"]["status"] == "CANCELLED") {
 			    $order->update_status("cancelled");
 			}
 		}
@@ -177,37 +144,9 @@ function WCPodeliPayment()
 			$billingEmail = $order->get_billing_email();
 			$billingPhone = $order->get_billing_phone();
 
-            $checkItems = [];
-            foreach ($orderItems as $item) {
-                $checkItems[] = [
-                    "count" => $item["quantity"],
-                    "price" => $item["amount"] - $item["itemPrepaidAmount"],
-                    "sum" => ($item["amount"] - $item["itemPrepaidAmount"]) * $item["quantity"],
-                    "name" => $item["name"],
-                    "nds_value" => 20,
-                    "nds_not_apply" => false,
-                    "payment_mode" => 1,
-                    "item_type" => 1
-                ];
-            }
-
 			if(strtoupper($curOrder['statusCode']) == 'COMPLETED') {
-				// Создание чека
-				$command = [
-					"author" => $_SERVER["HTTP_HOST"],
-					"smsEmail54FZ" => $billingEmail,
-					"c_num" => $billingPhone,
-					"payed_cashless" => $curOrder["amount"] - $curOrder["prepaidAmount"],
-					"goods" => $checkItems
-				];
-
-				if ($gateway->activateChecks == "yes") {
-					$response = $gateway->openApiClient->printCheck($command);
-					$checkID = $response["command_id"];
-					$order->update_meta_data("business_ru_check_id", $checkID);
-				}
 				$order->update_status("processing");
-			}
+            }
 
             // IF WAIT_FOR_COMMIT
 			if(strtoupper($curOrder['statusCode']) == 'WAIT_FOR_COMMIT') {
@@ -218,13 +157,13 @@ function WCPodeliPayment()
 					]
 				];
 
-				$client->orderCommit($podeliOrderId, $commitRequest);
-			}
+				$commitResponse = $client->orderCommit($podeliOrderId, $commitRequest);
+            }
 
 			// IF REJECTED
 			if(strtoupper($curOrder['statusCode']) == 'REJECTED' || strtoupper($curOrder['statusCode']) == 'ARCHIVED') {
 				$order->update_status("cancelled");
-			}
+            }
 		}
 		return rest_ensure_response('true');
 	}

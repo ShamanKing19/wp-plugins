@@ -1,10 +1,6 @@
 <?php
 
-use Open\Api\OpenClient;
-
 require_once __DIR__ . '/podeli-client.php';
-require_once __DIR__ . '/vendor/autoload.php';
-require_once __DIR__ . '/vendor/business-ru/open-api-sdk-php/src/OpenClient.php';
 
 class WCPodeliPayment extends WC_Payment_Gateway
 {
@@ -15,10 +11,6 @@ class WCPodeliPayment extends WC_Payment_Gateway
 	private string $password;
     public string $crt_certificate;
     public string $key_certificate;
-    private string $apiURL;
-    private string $appID;
-    private string $secretKey;
-    public OpenClient $openApiClient;
 	public string $activateChecks;
 
 
@@ -43,20 +35,12 @@ class WCPodeliPayment extends WC_Payment_Gateway
 		$this->login = $this->get_option('login');
 		$this->password = $this->get_option('password');
 		$this->title = $this->get_option('title');
+        $this->description = $this->get_option('description');
 		$this->activity = $this->get_option('activity');
 		$this->test_mode = $this->get_option('test_mode');
 
 		$this->crt_certificate = $this->get_option('crt_certificate');
 		$this->key_certificate = $this->get_option('key_certificate');
-
-		// Чеки Бизнес.ру
-		$this->activateChecks = $this->get_option('generate_checks');
-		if ($this->activateChecks == "yes") {
-			$this->apiURL = "https://check.business.ru/open-api/v1/";
-			$this->appID = $this->get_option('app_id'); //"c6e869bc-2f53-4487-9420-36d660dd7861";
-			$this->secretKey = $this->get_option('secret_key'); //"kJHMqcGmCU4IEr183du5yZ9elsFh6V7L";
-			$this->openApiClient = new OpenClient($this->apiURL, $this->appID, $this->secretKey);
-		}
 
 		$url = ((!empty($_SERVER['HTTPS'])) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'];
 		$this->notification_url = $url . "/wp-json/podeli/notify";
@@ -96,10 +80,17 @@ class WCPodeliPayment extends WC_Payment_Gateway
 	{
 		$this->form_fields = [
 			'title' => [
-				'title' => 'Подели',
+				'title' => 'Подели - Заголовок',
 				'label' => 'text',
-				'description' => '',
-				'default' => 'Оплата через сервис "Подели',
+				'description' => 'Отображается при выборе способа оплаты',
+				'default' => 'Оплата через сервис "Подели"',
+				'desc_tip' => true,
+			],
+            'description' => [
+				'title' => 'Подели - Описание',
+				'label' => 'text',
+				'description' => 'Отображается при выборе способа оплаты',
+				'default' => 'Оплата частями',
 				'desc_tip' => true,
 			],
 			'test_mode' => [
@@ -142,48 +133,25 @@ class WCPodeliPayment extends WC_Payment_Gateway
                 'desc_tip' => 'Содержимое файла формата key',
 				'css' => 'height: 300px;',
 				'type' => 'textarea',
-			],'generate_checks_title' => [
-				'title' => 'Настройки генерации чеков Бизнес.ру',
-                'desc_tip' => '',
-				'css' => 'display:none;',
-				'type' => 'text',
 			],
-			'generate_checks' => [
-				'title' => 'Генерация чеков',
-				'label' => 'Генирировать электронные чеки',
-				'type' => 'checkbox',
-				'desc_tip' => 'Включить или выключить генерацию чеков',
-				'default' => 'no'
-			],
-			'app_id' => [
-				'title' => 'ID Интеграции (appID)',
-				'type' => 'text',
-				'desc_tip' => 'Находится в интеграциях Бизнес.ру https://check.business.ru/integrations?route=integrations',
-			],
-			'secret_key' => [
-				'title' => 'Секретный ключ интеграции',
-				'type' => 'text',
-				'desc_tip' => 'Находится в интеграциях Бизнес.ру https://check.business.ru/integrations?route=integrations',
-			],
-
 		];
 
 	}
 
 
-	public function process_payment($order_id)
+	public function process_payment($orderId)
 	{
-		$order = wc_get_order($order_id);
-		$podeliOrderId = $order_id."_".wp_generate_password(6, false);
+		$order = wc_get_order($orderId);
+        $podeliOrderId = $orderId."_".wp_generate_password(6, false);
 
 		// Случай для платной доставки
-		$shipping_total = (int)$order->get_shipping_total();
-		$shipping_product = [
+		$shippingTotal = (int)$order->get_shipping_total();
+		$shippingProduct = [
 			"id" => 9999999999,
 			"article" => "",
 			"name" => "Доставка",
 			"quantity" => 1,
-			"amount" => $shipping_total,
+			"amount" => $shippingTotal,
 			"prepaidAmount" => 0
 		];
 
@@ -191,8 +159,8 @@ class WCPodeliPayment extends WC_Payment_Gateway
 		$prepaidTotalAmount = 0;
 		$items = WC()->cart->get_cart();
 		$podeliItems = [];
-		if ($shipping_total) {
-			$podeliItems[] = $shipping_product;
+		if ($shippingTotal) {
+			$podeliItems[] = $shippingProduct;
 		}
 
 		// Заполнение $items_data для отправки
@@ -242,7 +210,7 @@ class WCPodeliPayment extends WC_Payment_Gateway
 				"phone" => $phone,
 				"email" => $order->get_billing_email()
 			],
-			"notificationUrl" => $this->get_option('notification_url'),
+			"notificationUrl" => $this->notification_url,
 			"failUrl" => $this->get_option('fail_url'),
 			"successUrl" => $this->get_option('success_url')
 		];
@@ -271,7 +239,7 @@ class WCPodeliPayment extends WC_Payment_Gateway
 
 	public function process_refund( $orderId, $amount = null, $reason = '' ) {
 		$order = wc_get_order($orderId);
-		$orderItems = $order->get_items();
+        $orderItems = $order->get_items();
 		$xCorrelationId = $order->get_meta("x_correlation_id");
 		$podeliOrderId = $order->get_meta("podeli_order_id");
 		$orderTotal = $order->get_total();
@@ -305,17 +273,6 @@ class WCPodeliPayment extends WC_Payment_Gateway
 				"id" => $itemProductID,
 				"refundedQuantity" => $itemQuantity,
 			];
-
-			$checkItems[] = [
-				"count" => $itemQuantity,
-				"price" => $itemTotal,
-				"sum" => $itemTotal * $itemQuantity,
-				"name" => $itemName,
-				"nds_value" => 20,
-				"nds_not_apply" => false,
-				"payment_mode" => 1,
-				"item_type" => 1
-			];
 		}
 
 		// Данные запроса на возврат для Подели
@@ -330,31 +287,15 @@ class WCPodeliPayment extends WC_Payment_Gateway
 			]
 		];
 
-		$response = $this->client->orderRefund($podeliOrderId, $podeliRefundData, $xCorrelationId);
+        $response = $this->client->orderRefund($podeliOrderId, $podeliRefundData, $xCorrelationId);
 
 		// Успешный возврат
 		if ($response && strtoupper($response["data"]["order"]["status"]) == "REFUNDED" ) {
 			$billingEmail = $order->get_billing_email() ?? "";
 			$billingPhone = $order->get_billing_phone() ?? "";
-
-			// Создание чека
-			$command = [
-				"author" => $_SERVER["HTTP_HOST"],
-				"smsEmail54FZ" => $billingEmail,
-				"c_num" => $billingPhone,
-				"payed_cashless" => $orderTotal,
-				"goods" => $checkItems
-			];
-
-			if ($this->activateChecks == "yes"){
-				$orderRefundCheckResponse = $this->openApiClient->printPurchaseReturn($command);
-			}
-
 			$order->update_status("refunded");
-
 			return true;
 		}
-
 		return false;
 	}
 }
